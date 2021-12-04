@@ -1,0 +1,15 @@
+{
+  "jobs": [
+    {
+      "name": "Job1",
+      "tag": "Tag1",
+      "url": "https://jenkins.example.com/.../job/Job1/"
+    },
+    {
+      "name": "Job2",
+      "tag": "Tag2",
+      "url": "https://jenkins.example.com/.../job/Job2/"
+    }
+  ],
+  "authType": "password"
+}
