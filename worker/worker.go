@@ -2,6 +2,7 @@ package worker
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 type Build struct {
@@ -19,19 +20,28 @@ type Response struct {
 	LastCompletedBuild Build `json:"lastCompletedBuild"`
 }
 
+var JobStates []Response
 
-func HandleResponse(resp []byte) {
+func HandleResponse(resp []byte, index int) {
 
 	var responseObject Response
 	json.Unmarshal(resp, &responseObject)
 
-	var color = responseObject.Color
-	var notify string
-		
-	if color == "blue_anime" {
-		notify = "Build In Progress"
+	if index < len(JobStates) && JobStates[index].Name == responseObject.Name {
+		var color = responseObject.Color
+		//if (JobStates[index].Color != color) {
+			var notify string
+			
+			if color == "blue_anime" {
+				notify = "Build In Progress"
+			} else {
+				notify = "Build Completed with color = " + color
+			}
+			fmt.Print("-----> " + color + "\n")
+			pushNotification(responseObject.Name, notify, color, responseObject.URL)
+		//}
 	} else {
-		notify = "Build Completed with color = " + color
-		pushNotification(responseObject.Name, notify, color, responseObject.URL)
+		fmt.Print("not Exist\n")
+		JobStates = append(JobStates, responseObject)
 	}
 }

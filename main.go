@@ -11,9 +11,10 @@ import (
 	"os"
 	"syscall"
 
+	"golang.org/x/term"
 	"jenkins-notifier/worker"
 
-	"golang.org/x/term"
+	"time"
 )
 
 var (
@@ -49,19 +50,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	req, _ := http.NewRequest("GET", config.Jobs[0].URL+"api/json?pretty=true", nil)
-	req.Header.Set("Authorization", "basic "+basicAuthToken)
-	response, err := client.Do(req)
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
+	tick := time.Tick(10 * time.Second)
+	for range tick {
+		for i := 0; i < len(config.Jobs); i++ {
+			req, _ := http.NewRequest("GET", config.Jobs[i].URL+"api/json?pretty=true", nil)
+			req.Header.Set("Authorization", "basic "+ basicAuthToken)
+			response, err := client.Do(req)
+	
+			if err != nil {
+				fmt.Print(err.Error())
+				os.Exit(1)
+			}
 
-	responseData, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println(err)
+			responseData, err := ioutil.ReadAll(response.Body)
+			if err != nil {
+				fmt.Println(err)
+			}
+			worker.HandleResponse(responseData, i)
+		}
 	}
-	worker.HandleResponse(responseData)
 }
 
 func loadConfig(path string, ret interface{}) error {
