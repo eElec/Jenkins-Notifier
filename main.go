@@ -3,22 +3,23 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"log"
 
 	"net/http"
 	"os"
 	"syscall"
 
-	"golang.org/x/term"
+	"jenkins-notifier/utils"
 	"jenkins-notifier/worker"
 
-	"time"
+	"github.com/getlantern/systray"
+	"golang.org/x/term"
+	// "time"
 )
 
 var (
 	client *http.Client = &http.Client{}
+	jobs   map[string]worker.Job
 )
 
 const (
@@ -27,48 +28,8 @@ const (
 )
 
 type Configuration struct {
-	Jobs []struct {
-		Name string
-		Tag  string
-		URL  string
-	}
+	Jobs     []worker.ConfigJob
 	AuthType string
-}
-
-func main() {
-	// notifier.PushNotification()
-	// Load configurations
-	var config Configuration
-	err := loadConfig("config/config.json", &config)
-	if err != nil {
-		log.Fatalln("Error reading config.json")
-	}
-
-	// Get username and password
-	basicAuthToken, err := getCredentials(config.AuthType)
-	if err != nil {
-		os.Exit(1)
-	}
-
-	tick := time.Tick(10 * time.Second)
-	for range tick {
-		for i := 0; i < len(config.Jobs); i++ {
-			req, _ := http.NewRequest("GET", config.Jobs[i].URL+"api/json?pretty=true", nil)
-			req.Header.Set("Authorization", "basic "+ basicAuthToken)
-			response, err := client.Do(req)
-	
-			if err != nil {
-				fmt.Print(err.Error())
-				os.Exit(1)
-			}
-
-			responseData, err := ioutil.ReadAll(response.Body)
-			if err != nil {
-				fmt.Println(err)
-			}
-			worker.HandleResponse(responseData, i)
-		}
-	}
 }
 
 func loadConfig(path string, ret interface{}) error {
@@ -106,7 +67,7 @@ func getCredentials(authType string) (string, error) {
 			log.Fatalln("authType is set to \"token\", but no token is found in keys.json")
 		}
 	} else {
-		fmt.Print("\nPassword: ")
+		log.Print("\nPassword: ")
 		bytePassword, err := term.ReadPassword(int(syscall.Stdin))
 		if err != nil {
 			log.Fatalln(("Error while reading password."))
@@ -118,4 +79,56 @@ func getCredentials(authType string) (string, error) {
 	tokenEncoded := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 
 	return tokenEncoded, nil
+}
+
+func main() {
+	// Load configurations
+	var config Configuration
+	err := loadConfig("config/config.json", &config)
+	if err != nil {
+		log.Fatalln("Error reading config.json")
+	}
+
+	// Get auth token
+	basicAuthToken, err := getCredentials(config.AuthType)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	jobs = worker.Initialize(client, basicAuthToken, config.Jobs)
+	// for _, job := range jobs {
+	// 	go job.StartCheckStatus()
+	// }
+
+	systray.Run(onReady, onExit)
+}
+
+func onExit() {
+	for _, job := range jobs {
+		job.Stop()
+	}
+}
+
+func onReady() {
+	systray.SetIcon(utils.GetIcon("icons/jenkins.ico"))
+	systray.SetTitle("Jenkins Notifier")
+	systray.SetTooltip("Jenkins Notifier")
+	mQuit := systray.AddMenuItem("Quit", "Quit the whole app")
+	go func() {
+		<-mQuit.ClickedCh
+		log.Println("Quiting...")
+		systray.Quit()
+	}()
+
+	// job menu
+	jobsSubMenu := make(map[*systray.MenuItem]*worker.Job)
+	jobsMenu := systray.AddMenuItem("Jobs", "")
+	// aggregated channel
+	// https://stackoverflow.com/a/32342741
+	// agg := make(chan *systray.MenuItem)
+
+	for _, job := range jobs {
+		subMenu := jobsMenu.AddSubMenuItemCheckbox(job.Name, "", job.IsRunning())
+		jobsSubMenu[subMenu] = &job
+	}
 }
