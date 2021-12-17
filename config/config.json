@@ -11,5 +11,6 @@
       "url": "https://jenkins.example.com/.../job/Job2/"
     }
   ],
+  "interval": 60,
   "authType": "password"
 }

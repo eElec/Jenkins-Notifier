@@ -2,9 +2,9 @@ package worker
 
 import (
 	"fmt"
-	// "io/ioutil"
+	"io/ioutil"
 	"log"
-	// "net/http"
+	"net/http"
 	"time"
 )
 
@@ -30,51 +30,78 @@ type Job struct {
 	stop        chan struct{}
 }
 
-func (job Job) checkStatus() {
-	// req, _ := http.NewRequest("GET", job.URL+"api/json?pretty=true", nil)
-	// req.Header.Set("Authorization", "basic "+token)
-	// resp, err := client.Do(req)
-	// if err != nil {
-	// 	log.Println(err)
-	// }
-	// defer resp.Body.Close()
+func (job *Job) checkStatus() {
+	req, _ := http.NewRequest("GET", job.URL+"api/json?pretty=true", nil)
+	req.Header.Set("Authorization", "basic "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer resp.Body.Close()
 
-	// responseData, err := ioutil.ReadAll(resp.Body)
-	// if err != nil {
-	// 	log.Println(err)
-	// }
+	responseData, err := ioutil.ReadAll(resp.Body)
+	HandleResponse(responseData, job)
 	log.Println("Job:", job.Name, "\tRan")
 }
 
-func (job Job) StartCheckStatus() {
-	ticker := time.NewTicker(5 * time.Second)
-	for {
-		select {
-		case <-job.togglePause:
-			job.status = paused
-			fmt.Println("Job: ", job.Name, "\tPaused")
+func (job *Job) StartCheckStatus() {
+	log.Println("Started Job:", job.Name)
+	go func() {
+		var x time.Duration
+		if interval == 0 {
+			x = 60
+		} else {
+			x = time.Duration(interval)
+		}
+		ticker := time.NewTicker(x * time.Second)
+
+		job.status = running
+		job.checkStatus()
+		for {
 			select {
 			case <-job.togglePause:
+				job.status = paused
+				log.Println("Job: ", job.Name, "\tPaused")
+				select {
+				case <-job.togglePause:
+					log.Println("Job: ", job.Name, "\tUnpaused")
+				case <-job.stop:
+					job.status = stopped
+					log.Println("Job: ", job.Name, "\tStopped")
+					return
+				}
+			case <-job.stop:
+				job.status = stopped
+				log.Println("Job: ", job.Name, "\tStopped")
+				// wg.Done
+				return
+			case <-ticker.C:
+				job.status = running
+				job.checkStatus()
 			}
-		case <-job.stop:
-			job.status = stopped
-			fmt.Println("Job: ", job.Name, "\tStopped")
-			// wg.Done
-			return
-		case <-ticker.C:
-			job.status = running
-			job.checkStatus()
 		}
+	}()
+}
+
+func (job *Job) setResponse(resp Response) {
+	job.lastResponse = Response{
+		Name:               resp.Name,
+		URL:                resp.URL,
+		Builds:             resp.Builds,
+		Color:              resp.Color,
+		LastBuild:          resp.LastBuild,
+		LastCompletedBuild: resp.LastCompletedBuild,
 	}
 }
 
-func (job Job) Stop() {
+func (job *Job) Stop() {
 	if job.status != stopped {
 		job.stop <- struct{}{}
 	}
 }
 
-func (job Job) TogglePause() {
+func (job *Job) TogglePause() {
 	job.togglePause <- struct{}{}
 }
 

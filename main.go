@@ -14,12 +14,11 @@ import (
 
 	"github.com/getlantern/systray"
 	"golang.org/x/term"
-	// "time"
 )
 
 var (
 	client *http.Client = &http.Client{}
-	jobs   map[string]worker.Job
+	jobs   map[string]*worker.Job
 )
 
 const (
@@ -29,6 +28,7 @@ const (
 
 type Configuration struct {
 	Jobs     []worker.ConfigJob
+	Interval uint
 	AuthType string
 }
 
@@ -95,17 +95,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	jobs = worker.Initialize(client, basicAuthToken, config.Jobs)
-	// for _, job := range jobs {
-	// 	go job.StartCheckStatus()
-	// }
-
+	jobs = worker.Initialize(client, basicAuthToken, config.Interval, config.Jobs)
+	for k, _ := range jobs {
+		jobs[k].StartCheckStatus()
+	}
 	systray.Run(onReady, onExit)
 }
 
 func onExit() {
-	for _, job := range jobs {
-		job.Stop()
+	for k, _ := range jobs {
+		jobs[k].Stop()
 	}
 }
 
@@ -121,14 +120,24 @@ func onReady() {
 	}()
 
 	// job menu
-	jobsSubMenu := make(map[*systray.MenuItem]*worker.Job)
 	jobsMenu := systray.AddMenuItem("Jobs", "")
-	// aggregated channel
-	// https://stackoverflow.com/a/32342741
-	// agg := make(chan *systray.MenuItem)
 
-	for _, job := range jobs {
-		subMenu := jobsMenu.AddSubMenuItemCheckbox(job.Name, "", job.IsRunning())
-		jobsSubMenu[subMenu] = &job
+	for k, _ := range jobs {
+		subMenu := jobsMenu.AddSubMenuItemCheckbox(jobs[k].Name, "", jobs[k].IsRunning())
+
+		//
+		go func(subMenu *systray.MenuItem, job *worker.Job) {
+			for {
+				select {
+				case <-subMenu.ClickedCh:
+					job.TogglePause()
+					if subMenu.Checked() {
+						subMenu.Uncheck()
+					} else {
+						subMenu.Check()
+					}
+				}
+			}
+		}(subMenu, jobs[k])
 	}
 }
