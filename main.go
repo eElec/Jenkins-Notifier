@@ -4,21 +4,21 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"log"
+	"sync"
 
 	"net/http"
 	"os"
 	"syscall"
 
-	"jenkins-notifier/utils"
 	"jenkins-notifier/worker"
 
-	"github.com/getlantern/systray"
 	"golang.org/x/term"
 )
 
 var (
 	client *http.Client = &http.Client{}
 	jobs   map[string]*worker.Job
+	wg     sync.WaitGroup
 )
 
 const (
@@ -96,48 +96,10 @@ func main() {
 	}
 
 	jobs = worker.Initialize(client, basicAuthToken, config.Interval, config.Jobs)
-	for k, _ := range jobs {
+	for k := range jobs {
 		jobs[k].StartCheckStatus()
 	}
-	systray.Run(onReady, onExit)
-}
-
-func onExit() {
-	for k, _ := range jobs {
-		jobs[k].Stop()
-	}
-}
-
-func onReady() {
-	systray.SetIcon(utils.GetIcon("icons/jenkins.ico"))
-	systray.SetTitle("Jenkins Notifier")
-	systray.SetTooltip("Jenkins Notifier")
-	mQuit := systray.AddMenuItem("Quit", "Quit the whole app")
-	go func() {
-		<-mQuit.ClickedCh
-		log.Println("Quiting...")
-		systray.Quit()
-	}()
-
-	// job menu
-	jobsMenu := systray.AddMenuItem("Jobs", "")
-
-	for k, _ := range jobs {
-		subMenu := jobsMenu.AddSubMenuItemCheckbox(jobs[k].Name, "", jobs[k].IsRunning())
-
-		//
-		go func(subMenu *systray.MenuItem, job *worker.Job) {
-			for {
-				select {
-				case <-subMenu.ClickedCh:
-					job.TogglePause()
-					if subMenu.Checked() {
-						subMenu.Uncheck()
-					} else {
-						subMenu.Check()
-					}
-				}
-			}
-		}(subMenu, jobs[k])
-	}
+	wg.Add(1)
+	runApp()
+	wg.Wait()
 }

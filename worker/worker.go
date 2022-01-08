@@ -2,6 +2,7 @@ package worker
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -53,6 +54,7 @@ func Initialize(cl *http.Client, authToken string, intervalArg uint, configJob [
 			status:      stopped,
 			togglePause: make(chan struct{}),
 			stop:        make(chan struct{}),
+			Event:       make(chan int),
 		}
 	}
 	return jobs
@@ -64,6 +66,7 @@ func HandleResponse(resp []byte, job *Job) {
 	if job.lastResponse.Color != "" {
 		var color = responseObject.Color
 		var number = responseObject.LastBuild.Number
+		log.Println(strconv.Itoa(number) + ":\t" + color)
 		if job.lastResponse.Color != color || job.lastResponse.LastBuild.Number != number {
 			prepareNotification(*job, color, number, responseObject)
 			job.setResponse(responseObject)
@@ -93,7 +96,7 @@ func prepareNotification(job Job, color string, buildNumber int, resp Response) 
 	case strings.Contains(color, "yellow"):
 		icon = iconUnstable
 	// case strings.Contains(color, "aborted"):
-		//
+	//
 	default:
 		icon = ""
 	}

@@ -28,6 +28,7 @@ type Job struct {
 
 	togglePause chan struct{}
 	stop        chan struct{}
+	Event       chan int
 }
 
 func (job *Job) checkStatus() {
@@ -63,21 +64,24 @@ func (job *Job) StartCheckStatus() {
 			case <-job.togglePause:
 				job.status = paused
 				log.Println("Job: ", job.Name, "\tPaused")
+				job.Event <- job.status
 				select {
 				case <-job.togglePause:
+					job.status = running
 					log.Println("Job: ", job.Name, "\tUnpaused")
+					job.Event <- job.status
 				case <-job.stop:
 					job.status = stopped
 					log.Println("Job: ", job.Name, "\tStopped")
+					job.Event <- job.status
 					return
 				}
 			case <-job.stop:
 				job.status = stopped
 				log.Println("Job: ", job.Name, "\tStopped")
-				// wg.Done
+				job.Event <- job.status
 				return
 			case <-ticker.C:
-				job.status = running
 				job.checkStatus()
 			}
 		}
