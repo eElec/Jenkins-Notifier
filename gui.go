@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/getlantern/systray"
 )
@@ -29,7 +30,7 @@ func runApp() {
 		fyne.NewMenuItem("About", func() {
 			dialog.ShowCustom("About", "Close", container.NewVBox(
 				widget.NewLabel("Jenkins Notifier"),
-				widget.NewLabel("Version: v0.1"),
+				widget.NewLabel("Version: v1.0.0"),
 				widget.NewLabel("Author: Adrish Aditya"),
 			), w)
 		}))
@@ -41,13 +42,47 @@ func runApp() {
 	w.SetMainMenu(mainMenu)
 
 	//* Layout
+	// Create container for each job
+	var jobContainer = make([]fyne.CanvasObject, len(jobs))
+	var idx = 0
+	for jobName := range jobs {
+		job := jobs[jobName]
+		var status = getJobStatusName(job.GetStatus())
+		jobStatus := widget.NewLabel(status)
 
+		jobContainer[idx] = container.New(
+			layout.NewHBoxLayout(),
+			widget.NewLabel(jobName),
+			layout.NewSpacer(),
+			jobStatus,
+			widget.NewButton("Toggle", func() {
+				job.TogglePause()
+				// Update status text
+				// TODO: use a less scuffed way
+				go func() {
+					<-job.Event
+					jobStatus.SetText(getJobStatusName(job.GetStatus()))
+				}()
+
+			}),
+		)
+		idx++
+	}
+
+	mainContainer := container.New(
+		layout.NewVBoxLayout(),
+		jobContainer...,
+	)
+	w.SetContent(mainContainer)
+	w.Resize(fyne.NewSize(800, 300))
 	w.Show()
+
 	guiApp.Lifecycle().SetOnStopped(func() {
 		log.Println("Quiting..")
 		wg.Done()
 		systray.Quit()
 	})
+	
 	go systray.Run(onReady, onExit)
 	guiApp.Run()
 }
@@ -93,5 +128,18 @@ func onReady() {
 				}
 			}
 		}(subMenu, jobs[k])
+	}
+}
+
+func getJobStatusName(status worker.Status) string {
+	switch status {
+	case worker.Running:
+		return "Running"
+	case worker.Paused:
+		return "Paused"
+	case worker.Stopped:
+		return "Stopped"
+	default:
+		return "Unknown"
 	}
 }
