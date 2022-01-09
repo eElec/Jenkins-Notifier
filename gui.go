@@ -15,12 +15,13 @@ import (
 )
 
 var (
-	guiApp fyne.App
+	guiApp     fyne.App
+	mainWindow fyne.Window
 )
 
 func runApp() {
-	guiApp := app.New()
-	w := guiApp.NewWindow("Hello")
+	guiApp = app.New()
+	mainWindow = guiApp.NewWindow("Jenkins Notifier")
 
 	//* Menu
 	fileMenu := fyne.NewMenu("File",
@@ -32,14 +33,14 @@ func runApp() {
 				widget.NewLabel("Jenkins Notifier"),
 				widget.NewLabel("Version: v1.0.0"),
 				widget.NewLabel("Author: Adrish Aditya"),
-			), w)
+			), mainWindow)
 		}))
 
 	mainMenu := fyne.NewMainMenu(
 		fileMenu,
 		helpMenu,
 	)
-	w.SetMainMenu(mainMenu)
+	mainWindow.SetMainMenu(mainMenu)
 
 	//* Layout
 	// Create container for each job
@@ -73,16 +74,22 @@ func runApp() {
 		layout.NewVBoxLayout(),
 		jobContainer...,
 	)
-	w.SetContent(mainContainer)
-	w.Resize(fyne.NewSize(800, 300))
-	w.Show()
+	mainWindow.SetContent(mainContainer)
+	mainWindow.Resize(fyne.NewSize(800, 300))
+
+	mainWindow.SetCloseIntercept(func() {
+		// Close to tray
+		mainWindow.Hide()
+	})
+	
+	mainWindow.Show()
 
 	guiApp.Lifecycle().SetOnStopped(func() {
 		log.Println("Quiting..")
 		wg.Done()
 		systray.Quit()
 	})
-	
+
 	go systray.Run(onReady, onExit)
 	guiApp.Run()
 }
@@ -102,33 +109,21 @@ func onReady() {
 	systray.SetTitle("Jenkins Notifier")
 	systray.SetTooltip("Jenkins Notifier")
 	mQuit := systray.AddMenuItem("Quit", "Quit the whole app")
+
+	// Open window
+	mOpen := systray.AddMenuItem("Open", "Open window")
 	go func() {
-		<-mQuit.ClickedCh
-		log.Println("Quiting...")
-		systray.Quit()
-	}()
-
-	// job menu
-	jobsMenu := systray.AddMenuItem("Jobs", "")
-
-	for k := range jobs {
-		subMenu := jobsMenu.AddSubMenuItemCheckbox(jobs[k].Name, "", jobs[k].IsRunning())
-
-		//
-		go func(subMenu *systray.MenuItem, job *worker.Job) {
-			for {
-				select {
-				case <-subMenu.ClickedCh:
-					job.TogglePause()
-					if subMenu.Checked() {
-						subMenu.Uncheck()
-					} else {
-						subMenu.Check()
-					}
-				}
+		for {
+			select {
+			case <-mOpen.ClickedCh:
+				mainWindow.Show()
+			case <-mQuit.ClickedCh:
+				log.Println("Quiting...")
+				systray.Quit()
+				return
 			}
-		}(subMenu, jobs[k])
-	}
+		}
+	}()
 }
 
 func getJobStatusName(status worker.Status) string {
