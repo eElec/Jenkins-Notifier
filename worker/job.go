@@ -28,7 +28,6 @@ type Job struct {
 	status       Status
 	lastResponse Response
 
-	togglePause chan struct{}
 	stop        chan struct{}
 	Event       chan Status
 }
@@ -63,28 +62,14 @@ func (job *Job) StartCheckStatus() {
 		job.checkStatus()
 		for {
 			select {
-			case <-job.togglePause:
-				job.status = Paused
-				log.Println("Job: ", job.Name, "\tPaused")
-				job.Event <- job.status
-				select {
-				case <-job.togglePause:
-					job.status = Running
-					log.Println("Job: ", job.Name, "\tUnpaused")
-					job.Event <- job.status
-				case <-job.stop:
-					job.status = Stopped
-					log.Println("Job: ", job.Name, "\tStopped")
-					job.Event <- job.status
-					return
+			case <-ticker.C:
+				if job.status == Running {
+					job.checkStatus()
 				}
 			case <-job.stop:
-				job.status = Stopped
-				log.Println("Job: ", job.Name, "\tStopped")
+				ticker.Stop()
 				job.Event <- job.status
 				return
-			case <-ticker.C:
-				job.checkStatus()
 			}
 		}
 	}()
@@ -103,12 +88,20 @@ func (job *Job) setResponse(resp Response) {
 
 func (job *Job) Stop() {
 	if job.status != Stopped {
+		job.status = Stopped
 		job.stop <- struct{}{}
 	}
 }
 
 func (job *Job) TogglePause() {
-	job.togglePause <- struct{}{}
+	switch job.status {
+	case Running:
+		job.status = Paused
+		log.Println("Job: " + job.Name + "\tPaused")
+	case Paused:
+		job.status = Running
+		log.Println("Job: " + job.Name + "\tUnpaused")
+	}
 }
 
 func (job Job) IsRunning() bool {

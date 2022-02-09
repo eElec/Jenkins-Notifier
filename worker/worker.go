@@ -52,7 +52,6 @@ func Initialize(cl *http.Client, authToken string, intervalArg uint, configJob [
 		jobs[job.Name] = &Job{
 			ConfigJob:   job,
 			status:      Stopped,
-			togglePause: make(chan struct{}),
 			stop:        make(chan struct{}),
 			Event:       make(chan Status),
 		}

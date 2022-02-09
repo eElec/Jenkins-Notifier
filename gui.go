@@ -59,11 +59,7 @@ func runApp() {
 			widget.NewButton("Toggle", func() {
 				job.TogglePause()
 				// Update status text
-				// TODO: use a less scuffed way
-				go func() {
-					<-job.Event
-					jobStatus.SetText(getJobStatusName(job.GetStatus()))
-				}()
+				jobStatus.SetText(getJobStatusName(job.GetStatus()))
 
 			}),
 		)
@@ -81,11 +77,11 @@ func runApp() {
 		// Close to tray
 		mainWindow.Hide()
 	})
-	
+
 	mainWindow.Show()
 
 	guiApp.Lifecycle().SetOnStopped(func() {
-		log.Println("Quiting..")
+		log.Println("Quiting GUI")
 		wg.Done()
 		systray.Quit()
 	})
@@ -95,6 +91,7 @@ func runApp() {
 }
 
 func onExit() {
+	log.Println("Quiting Systray")
 	for k := range jobs {
 		jobs[k].Stop()
 		<-jobs[k].Event
@@ -118,7 +115,6 @@ func onReady() {
 			case <-mOpen.ClickedCh:
 				mainWindow.Show()
 			case <-mQuit.ClickedCh:
-				log.Println("Quiting...")
 				systray.Quit()
 				return
 			}
